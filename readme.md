@@ -6,6 +6,8 @@ Change .env.example to .env
 
 php artisan key:generate
 
+composer install 
+
 php artisan migrate --seed
 
 Email: Admin@admin.com Password: password 
