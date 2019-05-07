@@ -1,7 +1,17 @@
-.env file duhet e ndryshohet 
 
-php artisan migrate --seed per me kriju DB edhe userin Admin 
+## MiniCrm
 
-gjuha ndryshohet te Admin eshte me dropdown   error msg nuk e kam perkthye krejt 
 
-Per mail eshte mailtrap duhet me shtu pasin edhe username
+Change .env.example to .env  
+
+php artisan key:generate
+
+php artisan migrate --seed
+
+Email: Admin@admin.com Password: password 
+
+Add MAIL_USERNAME=  and MAIL_PASSWORD= from mailtrap 
+
+Has Two language En and Al 
+
+
