@@ -1,12 +1,16 @@
 <script setup>
-import { onMounted, ref, watch } from 'vue';
+import { onMounted, onUnmounted, ref, watch } from 'vue';
+import { latestRequest } from '../lib/latestRequest';
 import { api, errorText } from '../lib/api';
+import { toLocalInput } from '../lib/dates';
+import { useDialog } from '../composables/useDialog';
 import { useToastStore } from '../stores/toasts';
 
 const toast = useToastStore();
 const tasks = ref([]);
 const filter = ref('open');
 const priority = ref('');
+const requests = latestRequest();
 const error = ref('');
 const page = ref(1);
 const lastPage = ref(1);
@@ -17,20 +21,23 @@ const leads = ref([]);
 const customers = ref([]);
 const empty = () => ({ title: '', description: '', priority: 'normal', due_at: '', lead_id: '', company_id: '' });
 const form = ref(empty());
+useDialog(modal, '[aria-labelledby="task-title"]');
 
 async function load() {
+  const current = requests.start();
   try {
     const { data } = await api.get('/api/v1/tasks', { params: { filter: filter.value, priority: priority.value, page: page.value } });
+    if (!current()) return;
     tasks.value = data.data;
     lastPage.value = data.meta.last_page;
     error.value = '';
-  } catch (e) { error.value = errorText(e); }
+  } catch (e) { if (current()) error.value = errorText(e); }
 }
 async function open(task = null) {
   editing.value = task;
   form.value = task ? {
     title: task.title, description: task.description || '', priority: task.priority,
-    due_at: task.due_at ? new Date(task.due_at).toISOString().slice(0, 16) : '',
+    due_at: task.due_at ? toLocalInput(task.due_at) : '',
     lead_id: task.lead_id || '', company_id: task.customer_id || '',
   } : empty();
   try {
@@ -66,9 +73,10 @@ async function remove(task) {
   try { await api.delete('/api/v1/tasks/' + task.id); toast.push('Task deleted'); await load(); }
   catch (e) { toast.push(errorText(e), 'error'); }
 }
-watch([filter, priority], () => { page.value = 1; load(); });
+watch([filter, priority], () => { if (page.value !== 1) page.value = 1; else load(); });
 watch(page, load);
 onMounted(load);
+onUnmounted(() => requests.invalidate());
 </script>
 <template>
   <main class="mx-auto max-w-6xl p-6 lg:p-10">
@@ -108,7 +116,7 @@ onMounted(load);
       <button :disabled="page === lastPage" @click="page++">Next</button>
     </div></div>
     <div v-if="modal" class="fixed inset-0 z-30 flex items-center justify-center bg-slate-950/60 p-4" @click.self="modal = false">
-      <section role="dialog" aria-modal="true" aria-labelledby="task-title" class="w-full max-w-lg rounded-xl bg-white p-6">
+      <section role="dialog" aria-modal="true" aria-labelledby="task-title" class="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-xl bg-white p-6">
         <div class="flex justify-between"><h2 id="task-title" class="text-xl font-bold">{{ editing ? 'Edit task' : 'New follow-up' }}</h2>
           <button aria-label="Close" @click="modal = false">✕</button></div>
         <form class="mt-5 grid gap-3" @submit.prevent="save">

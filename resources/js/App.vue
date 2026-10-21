@@ -1,6 +1,8 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { RouterLink, RouterView, useRouter } from 'vue-router';
+import { latestRequest } from './lib/latestRequest';
+import { useDialog } from './composables/useDialog';
 import { api } from './lib/api';
 import { useAuthStore } from './stores/auth';
 import { useToastStore } from './stores/toasts';
@@ -19,6 +21,8 @@ const search = ref('');
 const results = ref({ leads: [], customers: [], tasks: [] });
 const busy = ref(false);
 let searchTimer;
+const searches = latestRequest();
+useDialog(showPalette, '[aria-label="Quick search"]');
 const matches = computed(() => [
   ...results.value.leads.map(r => ({ id: r.id, title: r.name, kind: 'Lead', to: '/leads' })),
   ...results.value.customers.map(r => ({ id: r.id, title: r.name, kind: 'Customer', to: '/customers/' + r.id })),
@@ -26,15 +30,20 @@ const matches = computed(() => [
 ]);
 watch(search, value => {
   clearTimeout(searchTimer);
+  const current = searches.start();
+  busy.value = false;
   if (value.trim().length < 2) {
     results.value = { leads: [], customers: [], tasks: [] };
     return;
   }
   searchTimer = setTimeout(async () => {
     busy.value = true;
-    try { results.value = (await api.get('/api/v1/search', { params: { q: value.trim() } })).data.data; }
-    catch { results.value = { leads: [], customers: [], tasks: [] }; }
-    finally { busy.value = false; }
+    try {
+      const response = await api.get('/api/v1/search', { params: { q: value.trim() } });
+      if (current()) results.value = response.data.data;
+    }
+    catch { if (current()) results.value = { leads: [], customers: [], tasks: [] }; }
+    finally { if (current()) busy.value = false; }
   }, 250);
 });
 function keys(event) {
@@ -45,8 +54,15 @@ function keys(event) {
   if (event.key === 'Escape') showPalette.value = false;
 }
 function error(event) { toasts.push(event.detail, 'error'); }
-onMounted(() => { window.addEventListener('keydown', keys); window.addEventListener('crm:error', error); });
-onUnmounted(() => { window.removeEventListener('keydown', keys); window.removeEventListener('crm:error', error); clearTimeout(searchTimer); });
+function unauthorized() {
+  if (!auth.user) return;
+  auth.user = null;
+  showPalette.value = false;
+  toasts.push('Your session expired. Sign in again.', 'error');
+  router.replace('/login');
+}
+onMounted(() => { window.addEventListener('keydown', keys); window.addEventListener('crm:error', error); window.addEventListener('crm:unauthorized', unauthorized); });
+onUnmounted(() => { window.removeEventListener('keydown', keys); window.removeEventListener('crm:error', error); window.removeEventListener('crm:unauthorized', unauthorized); clearTimeout(searchTimer); searches.invalidate(); });
 async function signOut() {
   try {
     await auth.logout();

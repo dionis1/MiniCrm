@@ -53,7 +53,6 @@ class CustomerController extends Controller
     public function show(Request $request, int $customer): CustomerResource
     {
         $model = $this->owned($request, $customer);
-        $model->load(['contacts' => fn ($q) => $q->where('user_id', $request->user()->id)]);
 
         return new CustomerResource($model);
     }
@@ -105,7 +104,7 @@ class CustomerController extends Controller
 
         return response()->json(['data' => CrmActivity::where('user_id', $request->user()->id)
             ->where('subject_type', 'customer')->where('subject_id', $customer)
-            ->latest()->limit(100)->get(['id', 'type', 'description', 'created_at'])]);
+            ->latest('id')->limit(100)->get(['id', 'type', 'description', 'created_at'])]);
     }
 
     public function logActivity(ActivityRequest $request, int $customer, LogCustomerActivityAction $action): JsonResponse

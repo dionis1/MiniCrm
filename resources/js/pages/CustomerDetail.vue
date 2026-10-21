@@ -1,6 +1,7 @@
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { RouterLink, useRoute } from 'vue-router';
+import { latestRequest } from '../lib/latestRequest';
 import { api, errorText } from '../lib/api';
 import { useToastStore } from '../stores/toasts';
 
@@ -8,6 +9,9 @@ const route = useRoute();
 const toasts = useToastStore();
 const customer = ref(null);
 const contacts = ref([]);
+const contactsPage = ref(1);
+const contactsLastPage = ref(1);
+const requests = latestRequest();
 const activities = ref([]);
 const tab = ref('contacts');
 const error = ref('');
@@ -20,17 +24,21 @@ const customerId = computed(() => route.params.id);
 const detailUrl = computed(() => '/api/v1/customers/' + customerId.value);
 
 async function load() {
+  const current = requests.start();
+  const url = detailUrl.value;
   error.value = '';
   try {
     const [details, people, history] = await Promise.all([
-      api.get(detailUrl.value),
-      api.get(detailUrl.value + '/contacts'),
-      api.get(detailUrl.value + '/activities'),
+      api.get(url),
+      api.get(url + '/contacts', { params: { page: contactsPage.value } }),
+      api.get(url + '/activities'),
     ]);
+    if (!current()) return;
     customer.value = details.data.data;
+    contactsLastPage.value = people.data.meta.last_page;
     contacts.value = people.data.data;
     activities.value = history.data.data;
-  } catch (reason) { error.value = errorText(reason); }
+  } catch (reason) { if (current()) error.value = errorText(reason); }
 }
 function openContact(record = null) {
   editing.value = record;
@@ -70,7 +78,9 @@ async function logActivity() {
   } catch (reason) { error.value = errorText(reason); }
   finally { busy.value = false; }
 }
-watch(customerId, load);
+watch(customerId, () => { customer.value = null; contactForm.value = false; contactsPage.value = 1; load(); });
+watch(contactsPage, load);
+onUnmounted(() => requests.invalidate());
 onMounted(load);
 </script>
 
@@ -89,7 +99,7 @@ onMounted(load);
         </div>
       </header>
       <div role="tablist" aria-label="Customer details" class="flex gap-3 border-b">
-        <button id="contacts-tab" role="tab" :aria-selected="tab === 'contacts'" @click="tab = 'contacts'" :class="tab === 'contacts' ? 'border-indigo-700 text-indigo-700' : 'border-transparent text-slate-600'" class="border-b-2 px-4 py-3 font-semibold">Contacts ({{ contacts.length }})</button>
+        <button id="contacts-tab" role="tab" :aria-selected="tab === 'contacts'" @click="tab = 'contacts'" :class="tab === 'contacts' ? 'border-indigo-700 text-indigo-700' : 'border-transparent text-slate-600'" class="border-b-2 px-4 py-3 font-semibold">Contacts</button>
         <button id="activity-tab" role="tab" :aria-selected="tab === 'activity'" @click="tab = 'activity'" :class="tab === 'activity' ? 'border-indigo-700 text-indigo-700' : 'border-transparent text-slate-600'" class="border-b-2 px-4 py-3 font-semibold">Activity feed</button>
       </div>
       <section v-if="tab === 'contacts'" role="tabpanel" aria-labelledby="contacts-tab" class="space-y-4">
@@ -108,6 +118,11 @@ onMounted(load);
           <div><h3 class="font-bold">{{ person.first_name }} {{ person.last_name }}</h3><p class="text-sm text-slate-600">{{ person.position }} · {{ person.email }}</p><p class="text-xs text-slate-500">{{ person.phone }}</p></div>
           <div class="flex gap-3 text-sm"><button @click="openContact(person)" class="text-indigo-700">Edit</button><button @click="deleteContact(person)" class="text-rose-700">Delete</button></div>
         </article>
+        <footer v-if="contactsLastPage > 1" class="flex items-center justify-between text-sm">
+          <button :disabled="contactsPage <= 1" @click="contactsPage--" class="rounded border px-3 py-2 disabled:opacity-50">Previous contacts</button>
+          <span>Page {{ contactsPage }} of {{ contactsLastPage }}</span>
+          <button :disabled="contactsPage >= contactsLastPage" @click="contactsPage++" class="rounded border px-3 py-2 disabled:opacity-50">Next contacts</button>
+        </footer>
         <p v-if="!contacts.length" class="text-slate-500">No contacts have been added yet.</p>
       </section>
       <section v-else role="tabpanel" aria-labelledby="activity-tab" class="space-y-5">

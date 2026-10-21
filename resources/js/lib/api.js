@@ -9,6 +9,12 @@ export const api = axios.create({
 api.interceptors.response.use(
   response => response,
   error => {
+    if (error.response?.status === 401) {
+      window.dispatchEvent(new CustomEvent('crm:unauthorized'));
+    }
+    if (error.response?.status === 419) {
+      window.dispatchEvent(new CustomEvent('crm:error', { detail: 'Your security token expired. Reload the page and try again.' }));
+    }
     if (error.response?.status >= 500) {
       window.dispatchEvent(new CustomEvent('crm:error', { detail: 'The server could not complete your request.' }));
     }

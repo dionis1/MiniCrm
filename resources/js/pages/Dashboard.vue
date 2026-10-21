@@ -24,10 +24,10 @@ const stages = ['new', 'contacted', 'proposal', 'closed_won', 'closed_lost'];
     <p v-if="error" role="alert" class="mb-5 text-rose-700">{{ error }}</p>
     <div v-if="data" class="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
       <div v-for="card in [
-          { title: 'Active leads', value: data.leads },
+          { title: 'Leads', value: data.leads },
           { title: 'Customers', value: data.customers },
           { title: 'Pipeline value', value: '$' + Number(data.open_pipeline_value).toLocaleString() },
-          { title: 'Won revenue', value: '$' + Number(data.won_value).toLocaleString() },
+          { title: 'Won deal value', value: '$' + Number(data.won_value).toLocaleString() },
         ]" :key="card.title" class="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
         <p class="text-sm text-slate-500">{{ card.title }}</p><p class="mt-2 text-3xl font-bold">{{ card.value }}</p>
       </div>

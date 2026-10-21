@@ -1,6 +1,7 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue';
+import { onMounted, onUnmounted, reactive, ref } from 'vue';
 import { RouterLink } from 'vue-router';
+import { latestRequest } from '../lib/latestRequest';
 import { api, errorText } from '../lib/api';
 import { useToastStore } from '../stores/toasts';
 
@@ -15,20 +16,23 @@ const loading = ref(false);
 const busy = ref(false);
 const formOpen = ref(false);
 const editing = ref(null);
+const requests = latestRequest();
 const error = ref('');
 const form = reactive({ name: '', email: '', phone: '', website_url: '', status: 'active', tags: '' });
 
 async function load() {
+  const current = requests.start();
   loading.value = true;
   error.value = '';
   try {
     const { data } = await api.get('/api/v1/customers', {
       params: { page: page.value, q: q.value || undefined, tag: tag.value || undefined, status: status.value || undefined, sort: 'name', direction: 'asc' },
     });
+    if (!current()) return;
     customers.value = data.data;
     lastPage.value = data.meta?.last_page || 1;
-  } catch (reason) { error.value = errorText(reason); }
-  finally { loading.value = false; }
+  } catch (reason) { if (current()) error.value = errorText(reason); }
+  finally { if (current()) loading.value = false; }
 }
 function open(customer = null) {
   editing.value = customer;
@@ -62,6 +66,7 @@ async function remove(customer) {
 }
 function filter() { page.value = 1; load(); }
 onMounted(load);
+onUnmounted(() => requests.invalidate());
 </script>
 
 <template>

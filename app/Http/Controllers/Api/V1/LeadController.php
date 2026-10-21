@@ -38,6 +38,7 @@ class LeadController extends Controller
 
         return LeadResource::collection($query
             ->orderBy($filters['sort'] ?? 'created_at', $filters['direction'] ?? 'desc')
+            ->orderBy('id', $filters['direction'] ?? 'desc')
             ->paginate($filters['per_page'] ?? 20)->withQueryString());
     }
 
@@ -89,7 +90,7 @@ class LeadController extends Controller
             ->where('user_id', $request->user()->id)
             ->where('subject_type', 'lead')
             ->where('subject_id', $record->id)
-            ->latest()->limit(100)->get(['id', 'type', 'description', 'created_at'])]);
+            ->latest('id')->limit(100)->get(['id', 'type', 'description', 'created_at'])]);
     }
 
     private function owned(Request $request, int $id): Lead
