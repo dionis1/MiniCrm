@@ -55,7 +55,7 @@ async function moved(evt) {
   // Restore Sortable's DOM mutation before Vue updates its keyed children.
   const sibling = evt.from.children[evt.oldIndex] || null;
   evt.from.insertBefore(evt.item, sibling);
-  if (!lead || !nextStage || lead.converted_customer_id) return;
+  if (!lead || !nextStage || lead.converted) return;
   const oldStage = lead.stage;
   lead.stage = nextStage;
   try {
@@ -133,9 +133,9 @@ onUnmounted(() => instances.forEach(instance => instance.destroy()));
             <p class="mt-3 text-sm font-semibold">${{ Number(lead.deal_value).toLocaleString() }}
               <span class="ml-1 font-normal text-slate-500">· {{ lead.probability }}%</span></p>
             <p class="text-xs text-slate-500">Expected: ${{ Number(lead.expected_value).toLocaleString() }}</p>
-            <button v-if="stage.id === 'closed_won' && !lead.converted_customer_id" type="button"
+            <button v-if="stage.id === 'closed_won' && !lead.converted" type="button"
               class="mt-3 text-xs font-semibold text-emerald-700 hover:underline" @click="convert(lead)">Convert to customer →</button>
-            <span v-if="lead.converted_customer_id" class="mt-3 block text-xs text-emerald-700">Converted ✓</span>
+            <span v-if="lead.converted" class="mt-3 block text-xs text-emerald-700">Converted ✓</span>
           </article>
         </div>
       </section>

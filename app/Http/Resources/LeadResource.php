@@ -21,6 +21,7 @@ class LeadResource extends JsonResource
             'expected_value' => round((float) $this->deal_value * $this->probability / 100, 2),
             'version' => $this->version,
             'converted_customer_id' => $this->converted_company_id,
+            'converted' => $this->converted_at !== null,
             'created_at' => $this->created_at?->toIso8601String(),
             'updated_at' => $this->updated_at?->toIso8601String(),
         ];

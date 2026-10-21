@@ -52,7 +52,8 @@ class ManageLead
                 ->where('user_id', $user->id)
                 ->where('version', $version)
                 ->whereNull('converted_company_id')
-                ->update(['version' => $version + 1, 'stage' => 'closed_won']);
+                ->whereNull('converted_at')
+                ->update(['version' => $version + 1, 'stage' => 'closed_won', 'converted_at' => now()]);
             if ($claimed !== 1) {
                 throw new ConflictHttpException('Lead was already changed or converted.');
             }

@@ -77,4 +77,21 @@ class LeadApiTest extends TestCase
             ->assertUnprocessable()
             ->assertJsonValidationErrors('per_page');
     }
+
+    public function test_lead_cannot_be_converted_again_after_customer_deletion(): void
+    {
+        $user = User::factory()->create();
+        Sanctum::actingAs($user);
+        $lead = Lead::create(['user_id' => $user->id, 'name' => 'One-time conversion']);
+
+        $customer = $this->postJson('/api/v1/leads/'.$lead->id.'/convert', ['version' => 0])
+            ->assertCreated()->json('data.id');
+        $this->deleteJson('/api/v1/customers/'.$customer)->assertNoContent();
+
+        $this->postJson('/api/v1/leads/'.$lead->id.'/convert', ['version' => 1])
+            ->assertStatus(409);
+        $this->assertDatabaseCount('companies', 0);
+        $this->assertNotNull($lead->fresh()->converted_at);
+    }
+
 }

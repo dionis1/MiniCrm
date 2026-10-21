@@ -16,7 +16,7 @@ class Lead extends Model
 
     protected function casts(): array
     {
-        return ['deal_value' => 'decimal:2', 'probability' => 'integer', 'version' => 'integer'];
+        return ['deal_value' => 'decimal:2', 'probability' => 'integer', 'version' => 'integer', 'converted_at' => 'datetime'];
     }
 
     public function owner(): BelongsTo
