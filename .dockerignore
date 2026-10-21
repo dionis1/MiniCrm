@@ -1,0 +1,16 @@
+.git
+.github
+node_modules
+vendor
+.env
+public/hot
+public/build
+storage/logs/*
+storage/framework/sessions/*
+storage/framework/views/*
+storage/framework/cache/data/*
+storage/app/*
+database/*.sqlite*
+test-results
+playwright-report
+docs/screenshots

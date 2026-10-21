@@ -1,0 +1,22 @@
+services:
+  app:
+    build: .
+    image: minicrm-local:latest
+    environment:
+      APP_NAME: MiniCRM
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_URL: "http://localhost:${APP_PORT:-8000}"
+      DB_CONNECTION: sqlite
+      DB_DATABASE: /var/www/html/storage/app/minicrm.sqlite
+      SESSION_DRIVER: file
+      CACHE_STORE: file
+      QUEUE_CONNECTION: sync
+      MAIL_MAILER: log
+      SANCTUM_STATEFUL_DOMAINS: "localhost:${APP_PORT:-8000},127.0.0.1:${APP_PORT:-8000}"
+    ports:
+      - "127.0.0.1:${APP_PORT:-8000}:8000"
+    volumes:
+      - minicrm-storage:/var/www/html/storage
+volumes:
+  minicrm-storage:
