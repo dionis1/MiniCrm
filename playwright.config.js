@@ -1,0 +1,8 @@
+import { defineConfig } from '@playwright/test';
+
+export default defineConfig({
+  testDir: './tests/Browser',
+  timeout: 45_000,
+  retries: 1,
+  use: { baseURL: 'http://127.0.0.1:8010', browserName: 'chromium', trace: 'retain-on-failure' },
+});
