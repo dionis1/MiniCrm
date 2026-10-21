@@ -93,5 +93,4 @@ class LeadApiTest extends TestCase
         $this->assertDatabaseCount('companies', 0);
         $this->assertNotNull($lead->fresh()->converted_at);
     }
-
 }
