@@ -1,0 +1,8 @@
+@import 'tailwindcss';
+
+@source '../views/**/*.blade.php';
+@source '../js/**/*.vue';
+
+:root { font-family: ui-sans-serif, system-ui, sans-serif; }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid #2563eb; outline-offset: 2px; }
