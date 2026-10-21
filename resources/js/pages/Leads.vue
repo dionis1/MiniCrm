@@ -89,6 +89,16 @@ async function save() {
   } catch (e) { error.value = errorText(e); }
   finally { saving.value = false; }
 }
+async function removeLead() {
+  if (!editing.value || !window.confirm('Delete this lead permanently?')) return;
+  try {
+    await api.delete('/api/v1/leads/' + editing.value.id);
+    modal.value = false;
+    editing.value = null;
+    toasts.push('Lead deleted.');
+    await load();
+  } catch (e) { error.value = errorText(e); }
+}
 async function convert(lead) {
   if (!window.confirm('Convert this lead into a customer?')) return;
   try {
@@ -160,6 +170,7 @@ onUnmounted(() => instances.forEach(instance => instance.destroy()));
           </select></label>
           <p v-if="error" role="alert" class="text-sm text-rose-700">{{ error }}</p>
           <div class="flex justify-end gap-2">
+            <button v-if="editing" type="button" class="mr-auto rounded-lg border border-rose-300 px-4 py-2 font-medium text-rose-700" @click="removeLead">Delete lead</button>
             <button type="button" class="rounded-lg border border-slate-300 px-4 py-2" @click="modal = false">Cancel</button>
             <button type="submit" :disabled="saving" class="rounded-lg bg-indigo-600 px-5 py-2 font-semibold text-white disabled:opacity-50">{{ saving ? 'Saving…' : 'Save lead' }}</button>
           </div>
