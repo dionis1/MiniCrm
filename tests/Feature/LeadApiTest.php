@@ -77,5 +77,4 @@ class LeadApiTest extends TestCase
             ->assertUnprocessable()
             ->assertJsonValidationErrors('per_page');
     }
-
 }
