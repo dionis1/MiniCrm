@@ -2,9 +2,16 @@
 
 namespace App\Http\Controllers\Api\V1;
 
-use App\Actions\ManageCustomer;
+use App\Actions\CreateCustomerAction;
+use App\Actions\DeleteContactAction;
+use App\Actions\DeleteCustomerAction;
+use App\Actions\LogCustomerActivityAction;
+use App\Actions\SaveContactAction;
+use App\Actions\UpdateCustomerAction;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ActivityRequest;
 use App\Http\Requests\ContactRequest;
+use App\Http\Requests\CustomerFilterRequest;
 use App\Http\Requests\CustomerRequest;
 use App\Http\Resources\ContactResource;
 use App\Http\Resources\CustomerResource;
@@ -14,19 +21,13 @@ use App\Models\Customer;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
-use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Gate;
 
 class CustomerController extends Controller
 {
-    public function index(Request $request): AnonymousResourceCollection
+    public function index(CustomerFilterRequest $request): AnonymousResourceCollection
     {
-        $data = $request->validate([
-            'q' => ['nullable', 'string', 'max:100'],
-            'tag' => ['nullable', 'string', 'max:40'],
-            'status' => ['nullable', Rule::in(['active', 'inactive'])],
-            'sort' => ['nullable', Rule::in(['name', 'created_at'])],
-            'direction' => ['nullable', Rule::in(['asc', 'desc'])],
-        ]);
+        $data = $request->validated();
         $q = Customer::where('user_id', $request->user()->id);
         if (! empty($data['q'])) {
             $q->where('name', 'like', '%'.$data['q'].'%');
@@ -39,12 +40,12 @@ class CustomerController extends Controller
         }
 
         return CustomerResource::collection($q->orderBy($data['sort'] ?? 'created_at', $data['direction'] ?? 'desc')
-            ->paginate(20)->withQueryString());
+            ->orderBy('id')->paginate(20)->withQueryString());
     }
 
-    public function store(CustomerRequest $request, ManageCustomer $action): JsonResponse
+    public function store(CustomerRequest $request, CreateCustomerAction $action): JsonResponse
     {
-        $customer = $action->create($request->user(), $request->validated());
+        $customer = $action($request->user(), $request->validated());
 
         return (new CustomerResource($customer))->response()->setStatusCode(201);
     }
@@ -57,14 +58,14 @@ class CustomerController extends Controller
         return new CustomerResource($model);
     }
 
-    public function update(CustomerRequest $request, int $customer, ManageCustomer $action): CustomerResource
+    public function update(CustomerRequest $request, int $customer, UpdateCustomerAction $action): CustomerResource
     {
-        return new CustomerResource($action->update($request->user(), $this->owned($request, $customer), $request->validated()));
+        return new CustomerResource($action($request->user(), $this->owned($request, $customer), $request->validated()));
     }
 
-    public function destroy(Request $request, int $customer): JsonResponse
+    public function destroy(Request $request, int $customer, DeleteCustomerAction $action): JsonResponse
     {
-        $this->owned($request, $customer)->delete();
+        $action($request->user(), $this->owned($request, $customer));
 
         return response()->json(status: 204);
     }
@@ -74,27 +75,26 @@ class CustomerController extends Controller
         $model = $this->owned($request, $customer);
 
         return ContactResource::collection($model->contacts()
-            ->where('user_id', $request->user()->id)->orderBy('first_name')->paginate(20));
+            ->where('user_id', $request->user()->id)->orderBy('first_name')->orderBy('id')->paginate(20));
     }
 
-    public function addContact(ContactRequest $request, int $customer, ManageCustomer $action): JsonResponse
+    public function addContact(ContactRequest $request, int $customer, SaveContactAction $action): JsonResponse
     {
-        $contact = $action->contact($request->user(), $this->owned($request, $customer), $request->validated());
+        $contact = $action($request->user(), $this->owned($request, $customer), $request->validated());
 
         return (new ContactResource($contact))->response()->setStatusCode(201);
     }
 
-    public function updateContact(ContactRequest $request, int $contact): ContactResource
+    public function updateContact(ContactRequest $request, int $contact, SaveContactAction $action): ContactResource
     {
         $model = Contact::where('user_id', $request->user()->id)->findOrFail($contact);
-        $model->update($request->validated());
 
-        return new ContactResource($model->refresh());
+        return new ContactResource($action($request->user(), $this->owned($request, $model->companie_id), $request->validated(), $model));
     }
 
-    public function deleteContact(Request $request, int $contact): JsonResponse
+    public function deleteContact(Request $request, int $contact, DeleteContactAction $action): JsonResponse
     {
-        Contact::where('user_id', $request->user()->id)->findOrFail($contact)->delete();
+        $action($request->user(), Contact::where('user_id', $request->user()->id)->findOrFail($contact));
 
         return response()->json(status: 204);
     }
@@ -108,19 +108,19 @@ class CustomerController extends Controller
             ->latest()->limit(100)->get(['id', 'type', 'description', 'created_at'])]);
     }
 
-    public function logActivity(Request $request, int $customer, ManageCustomer $action): JsonResponse
+    public function logActivity(ActivityRequest $request, int $customer, LogCustomerActivityAction $action): JsonResponse
     {
-        $data = $request->validate([
-            'type' => ['required', Rule::in(['call', 'note', 'email', 'meeting'])],
-            'description' => ['required', 'string', 'max:3000'],
-        ]);
-        $action->note($request->user(), $this->owned($request, $customer), $data['type'], $data['description']);
+        $data = $request->validated();
+        $action($request->user(), $this->owned($request, $customer), $data);
 
         return response()->json(['message' => 'Activity recorded.'], 201);
     }
 
     private function owned(Request $request, int $id): Customer
     {
-        return Customer::where('user_id', $request->user()->id)->findOrFail($id);
+        $record = Customer::where('user_id', $request->user()->id)->findOrFail($id);
+        Gate::authorize('view', $record);
+
+        return $record;
     }
 }

@@ -2,29 +2,28 @@
 
 namespace App\Http\Controllers\Api\V1;
 
-use App\Actions\ManageLead;
+use App\Actions\ConvertLeadAction;
+use App\Actions\CreateLeadAction;
+use App\Actions\DeleteLeadAction;
+use App\Actions\UpdateLeadAction;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\LeadFilterRequest;
 use App\Http\Requests\LeadRequest;
+use App\Http\Requests\LeadStageRequest;
+use App\Http\Requests\LeadVersionRequest;
 use App\Http\Resources\LeadResource;
 use App\Models\CrmActivity;
 use App\Models\Lead;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
-use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Gate;
 
 class LeadController extends Controller
 {
-    public function index(Request $request): AnonymousResourceCollection
+    public function index(LeadFilterRequest $request): AnonymousResourceCollection
     {
-        $filters = $request->validate([
-            'q' => ['nullable', 'string', 'max:100'],
-            'per_page' => ['nullable', 'integer', 'between:1,100'],
-            'stage' => ['nullable', Rule::in(Lead::STAGES)],
-            'sort' => ['nullable', Rule::in(['created_at', 'name', 'deal_value'])],
-            'per_page' => ['nullable', 'integer', 'between:1,100'],
-            'direction' => ['nullable', Rule::in(['asc', 'desc'])],
-        ]);
+        $filters = $request->validated();
         $query = Lead::where('user_id', $request->user()->id);
         if (! empty($filters['stage'])) {
             $query->where('stage', $filters['stage']);
@@ -42,9 +41,9 @@ class LeadController extends Controller
             ->paginate($filters['per_page'] ?? 20)->withQueryString());
     }
 
-    public function store(LeadRequest $request, ManageLead $action): JsonResponse
+    public function store(LeadRequest $request, CreateLeadAction $action): JsonResponse
     {
-        $lead = $action->create($request->user(), $request->validated());
+        $lead = $action($request->user(), $request->validated());
 
         return (new LeadResource($lead))->response()->setStatusCode(201);
     }
@@ -54,33 +53,30 @@ class LeadController extends Controller
         return new LeadResource($this->owned($request, $lead));
     }
 
-    public function update(LeadRequest $request, int $lead, ManageLead $action): LeadResource
+    public function update(LeadRequest $request, int $lead, UpdateLeadAction $action): LeadResource
     {
-        return new LeadResource($action->update($request->user(), $this->owned($request, $lead), $request->validated()));
+        return new LeadResource($action($request->user(), $this->owned($request, $lead), $request->validated()));
     }
 
-    public function stage(Request $request, int $lead, ManageLead $action): LeadResource
+    public function stage(LeadStageRequest $request, int $lead, UpdateLeadAction $action): LeadResource
     {
-        $data = $request->validate([
-            'stage' => ['required', Rule::in(Lead::STAGES)],
-            'version' => ['required', 'integer', 'min:0'],
-        ]);
+        $data = $request->validated();
 
-        return new LeadResource($action->update($request->user(), $this->owned($request, $lead), $data));
+        return new LeadResource($action($request->user(), $this->owned($request, $lead), $data));
     }
 
-    public function convert(Request $request, int $lead, ManageLead $action): JsonResponse
+    public function convert(LeadVersionRequest $request, int $lead, ConvertLeadAction $action): JsonResponse
     {
-        $data = $request->validate(['version' => ['required', 'integer', 'min:0']]);
-        $customer = $action->convert($request->user(), $this->owned($request, $lead), $data['version']);
+        $data = $request->validated();
+        $customer = $action($request->user(), $this->owned($request, $lead), $data['version']);
 
         return response()->json(['data' => ['id' => $customer->id, 'name' => $customer->name]], 201);
     }
 
-    public function destroy(Request $request, int $lead): JsonResponse
+    public function destroy(Request $request, int $lead, DeleteLeadAction $action): JsonResponse
     {
         $record = $this->owned($request, $lead);
-        $record->delete();
+        $action($request->user(), $record);
 
         return response()->json(status: 204);
     }
@@ -98,6 +94,9 @@ class LeadController extends Controller
 
     private function owned(Request $request, int $id): Lead
     {
-        return Lead::where('user_id', $request->user()->id)->findOrFail($id);
+        $record = Lead::where('user_id', $request->user()->id)->findOrFail($id);
+        Gate::authorize('view', $record);
+
+        return $record;
     }
 }

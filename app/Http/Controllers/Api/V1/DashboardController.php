@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\SearchRequest;
 use App\Models\CrmTask;
 use App\Models\Customer;
 use App\Models\Lead;
@@ -24,7 +25,7 @@ class DashboardController extends Controller
             'open_pipeline_value' => round((float) $open->sum('deal_value'), 2),
             'won_value' => round((float) $won->sum('deal_value'), 2),
             'tasks_today' => CrmTask::where('user_id', $owner)->whereNull('completed_at')
-                ->whereDate('due_at', today('UTC'))->count(),
+                ->where('due_at', '>=', today('UTC'))->where('due_at', '<', today('UTC')->addDay())->count(),
             'tasks_overdue' => CrmTask::where('user_id', $owner)->whereNull('completed_at')
                 ->where('due_at', '<', now())->count(),
             'by_stage' => (clone $leads)->selectRaw('stage, COUNT(*) as total')
@@ -32,9 +33,9 @@ class DashboardController extends Controller
         ]]);
     }
 
-    public function search(Request $request): JsonResponse
+    public function search(SearchRequest $request): JsonResponse
     {
-        $data = $request->validate(['q' => ['required', 'string', 'min:2', 'max:80']]);
+        $data = $request->validated();
         $owner = $request->user()->id;
         $term = '%'.$data['q'].'%';
 

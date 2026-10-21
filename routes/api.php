@@ -7,7 +7,7 @@ use App\Http\Controllers\Api\V1\TaskController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware('auth:sanctum')->prefix('v1')->group(function (): void {
+Route::middleware(['auth:sanctum', 'throttle:crm-api'])->prefix('v1')->group(function (): void {
     Route::get('/dashboard/metrics', [DashboardController::class, 'metrics']);
     Route::get('/search', [DashboardController::class, 'search']);
     Route::apiResource('tasks', TaskController::class);

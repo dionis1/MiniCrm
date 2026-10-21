@@ -28,7 +28,7 @@ class CustomerApiTest extends TestCase
         $this->postJson("/api/v1/customers/$id/activities", [
             'type' => 'call', 'description' => 'Agreed on a proposal.',
         ])->assertCreated();
-        $this->getJson("/api/v1/customers/$id/activities")->assertJsonCount(3, 'data');
+        $this->getJson("/api/v1/customers/$id/activities")->assertJsonCount(4, 'data')->assertJsonFragment(['type' => 'contact_updated']);
     }
 
     public function test_other_user_cannot_access_customer_or_contacts(): void

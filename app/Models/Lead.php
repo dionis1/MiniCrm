@@ -2,12 +2,14 @@
 
 namespace App\Models;
 
+use App\Enums\LeadStage;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Lead extends Model
 {
-    public const STAGES = ['new', 'contacted', 'proposal', 'closed_won', 'closed_lost'];
+    use HasFactory;
 
     protected $fillable = [
         'user_id', 'name', 'email', 'phone', 'company_name', 'stage',
@@ -16,7 +18,7 @@ class Lead extends Model
 
     protected function casts(): array
     {
-        return ['deal_value' => 'decimal:2', 'probability' => 'integer', 'version' => 'integer', 'converted_at' => 'datetime'];
+        return ['stage' => LeadStage::class, 'deal_value' => 'decimal:2', 'probability' => 'integer', 'version' => 'integer', 'converted_at' => 'datetime'];
     }
 
     public function owner(): BelongsTo

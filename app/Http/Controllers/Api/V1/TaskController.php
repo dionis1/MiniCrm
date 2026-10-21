@@ -2,31 +2,33 @@
 
 namespace App\Http\Controllers\Api\V1;
 
-use App\Actions\ManageTask;
+use App\Actions\CompleteTaskAction;
+use App\Actions\CreateTaskAction;
+use App\Actions\DeleteTaskAction;
+use App\Actions\UpdateTaskAction;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\TaskCompletionRequest;
+use App\Http\Requests\TaskFilterRequest;
 use App\Http\Requests\TaskRequest;
 use App\Http\Resources\TaskResource;
 use App\Models\CrmTask;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
-use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Gate;
 
 class TaskController extends Controller
 {
-    public function index(Request $request): AnonymousResourceCollection
+    public function index(TaskFilterRequest $request): AnonymousResourceCollection
     {
-        $data = $request->validate([
-            'filter' => ['nullable', Rule::in(['all', 'today', 'overdue', 'open', 'completed'])],
-            'priority' => ['nullable', Rule::in(['low', 'normal', 'high'])],
-        ]);
+        $data = $request->validated();
         $query = CrmTask::where('user_id', $request->user()->id);
         if (! empty($data['priority'])) {
             $query->where('priority', $data['priority']);
         }
         switch ($data['filter'] ?? 'all') {
             case 'today':
-                $query->whereNull('completed_at')->whereDate('due_at', today('UTC'));
+                $query->whereNull('completed_at')->where('due_at', '>=', today('UTC'))->where('due_at', '<', today('UTC')->addDay());
                 break;
             case 'overdue':
                 $query->whereNull('completed_at')->where('due_at', '<', now());
@@ -40,12 +42,12 @@ class TaskController extends Controller
         }
 
         return TaskResource::collection($query->orderByRaw('CASE WHEN due_at IS NULL THEN 1 ELSE 0 END')
-            ->orderBy('due_at')->paginate(20)->withQueryString());
+            ->orderBy('due_at')->orderBy('id')->paginate(20)->withQueryString());
     }
 
-    public function store(TaskRequest $request, ManageTask $action): JsonResponse
+    public function store(TaskRequest $request, CreateTaskAction $action): JsonResponse
     {
-        $task = $action->create($request->user(), $request->validated());
+        $task = $action($request->user(), $request->validated());
 
         return (new TaskResource($task))->response()->setStatusCode(201);
     }
@@ -55,27 +57,30 @@ class TaskController extends Controller
         return new TaskResource($this->owned($request, $task));
     }
 
-    public function update(TaskRequest $request, int $task, ManageTask $action): TaskResource
+    public function update(TaskRequest $request, int $task, UpdateTaskAction $action): TaskResource
     {
-        return new TaskResource($action->update($request->user(), $this->owned($request, $task), $request->validated()));
+        return new TaskResource($action($request->user(), $this->owned($request, $task), $request->validated()));
     }
 
-    public function complete(Request $request, int $task, ManageTask $action): TaskResource
+    public function complete(TaskCompletionRequest $request, int $task, CompleteTaskAction $action): TaskResource
     {
-        $data = $request->validate(['completed' => ['required', 'boolean']]);
+        $data = $request->validated();
 
-        return new TaskResource($action->complete($request->user(), $this->owned($request, $task), $data['completed']));
+        return new TaskResource($action($request->user(), $this->owned($request, $task), $data['completed']));
     }
 
-    public function destroy(Request $request, int $task): JsonResponse
+    public function destroy(Request $request, int $task, DeleteTaskAction $action): JsonResponse
     {
-        $this->owned($request, $task)->delete();
+        $action($request->user(), $this->owned($request, $task));
 
         return response()->json(status: 204);
     }
 
     private function owned(Request $request, int $task): CrmTask
     {
-        return CrmTask::where('user_id', $request->user()->id)->findOrFail($task);
+        $record = CrmTask::where('user_id', $request->user()->id)->findOrFail($task);
+        Gate::authorize('view', $record);
+
+        return $record;
     }
 }
