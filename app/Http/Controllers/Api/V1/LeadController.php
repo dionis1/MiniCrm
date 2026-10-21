@@ -40,13 +40,11 @@ class LeadController extends Controller
             ->paginate(20)->withQueryString());
     }
 
-    public function store(LeadRequest $request, ManageLead $action): LeadResource
+    public function store(LeadRequest $request, ManageLead $action): JsonResponse
     {
         $lead = $action->create($request->user(), $request->validated());
 
-        return (new LeadResource($lead))->response()->setStatusCode(201)->getData(true)
-            ? new LeadResource($lead)
-            : new LeadResource($lead);
+        return (new LeadResource($lead))->response()->setStatusCode(201);
     }
 
     public function show(Request $request, int $lead): LeadResource
