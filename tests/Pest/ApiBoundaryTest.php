@@ -27,3 +27,7 @@ it('keeps pipeline pagination complete and owner scoped', function () {
 it('returns JSON authentication errors even when the client does not request JSON', function () {
     $this->get('/api/v1/leads', ['Accept' => 'text/html'])->assertUnauthorized()->assertJsonStructure(['message']);
 });
+
+it('rejects an unknown Sanctum bearer token without a database error', function () {
+    $this->withToken('invalid-token')->getJson('/api/v1/leads')->assertUnauthorized();
+});

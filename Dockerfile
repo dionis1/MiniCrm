@@ -22,7 +22,8 @@ COPY --from=frontend /app/public/build ./public/build
 RUN composer dump-autoload --optimize \
     && touch .env \
     && mkdir -p storage/app storage/framework/cache/data storage/framework/sessions storage/framework/views storage/logs \
-    && chown -R www-data:www-data storage bootstrap/cache
+    && mkdir -p vendor/pestphp/pest/.temp vendor/pestphp/pest-plugin-mutate/.temp \
+    && chown -R www-data:www-data storage bootstrap/cache vendor/pestphp/pest/.temp vendor/pestphp/pest-plugin-mutate/.temp
 USER www-data
 EXPOSE 8000
 ENTRYPOINT ["sh", "docker/entrypoint.sh"]
