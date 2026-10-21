@@ -51,7 +51,7 @@ jobs:
       - name: Prepare disposable SQLite app
         run: |
           cp .env.example .env
-          printf '\\nAPP_URL=http://127.0.0.1:8010\\nDB_DATABASE=%s/database/browser.sqlite\\nSANCTUM_STATEFUL_DOMAINS=127.0.0.1:8010,localhost:8010\\n' "$PWD" >> .env
+          printf '\nAPP_URL=http://127.0.0.1:8010\nDB_DATABASE=%s/database/browser.sqlite\nSANCTUM_STATEFUL_DOMAINS=127.0.0.1:8010,localhost:8010\n' "$PWD" >> .env
           php artisan key:generate
           touch database/browser.sqlite
           php artisan migrate --force
