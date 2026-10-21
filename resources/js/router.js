@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard.vue';
 import Leads from './pages/Leads.vue';
 import Customers from './pages/Customers.vue';
 import CustomerDetail from './pages/CustomerDetail.vue';
+import Tasks from './pages/Tasks.vue';
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -15,6 +16,7 @@ export const router = createRouter({
     { path: '/leads', component: Leads, meta: { auth: true } },
     { path: '/customers', component: Customers, meta: { auth: true } },
     { path: '/customers/:id', component: CustomerDetail, meta: { auth: true } },
+    { path: '/tasks', component: Tasks, meta: { auth: true } },
     { path: '/:pathMatch(.*)*', redirect: '/dashboard' },
   ],
 });
