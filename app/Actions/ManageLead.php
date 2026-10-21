@@ -31,6 +31,7 @@ class ManageLead
                 ->where('user_id', $user->id)
                 ->where('version', $version)
                 ->whereNull('converted_company_id')
+                ->whereNull('converted_at')
                 ->update(array_merge($data, ['version' => $version + 1]));
 
             if ($changed !== 1) {
