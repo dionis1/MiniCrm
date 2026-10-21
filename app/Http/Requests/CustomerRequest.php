@@ -7,7 +7,10 @@ use Illuminate\Validation\Rule;
 
 class CustomerRequest extends FormRequest
 {
-    public function authorize(): bool { return $this->user() !== null; }
+    public function authorize(): bool
+    {
+        return $this->user() !== null;
+    }
 
     public function rules(): array
     {
