@@ -5,6 +5,8 @@ import Dashboard from './pages/Dashboard.vue';
 import Leads from './pages/Leads.vue';
 import Customers from './pages/Customers.vue';
 import CustomerDetail from './pages/CustomerDetail.vue';
+import Customers from './pages/Customers.vue';
+import CustomerDetail from './pages/CustomerDetail.vue';
 
 export const router = createRouter({
   history: createWebHistory(),
@@ -13,6 +15,8 @@ export const router = createRouter({
     { path: '/login', component: Login, meta: { guest: true } },
     { path: '/dashboard', component: Dashboard, meta: { auth: true } },
     { path: '/leads', component: Leads, meta: { auth: true } },
+    { path: '/customers', component: Customers, meta: { auth: true } },
+    { path: '/customers/:id', component: CustomerDetail, meta: { auth: true } },
     { path: '/customers', component: Customers, meta: { auth: true } },
     { path: '/customers/:id', component: CustomerDetail, meta: { auth: true } },
     { path: '/:pathMatch(.*)*', redirect: '/dashboard' },

@@ -1,99 +1,133 @@
 <script setup>
-import { onMounted, ref } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { RouterLink, useRoute } from 'vue-router';
 import { api, errorText } from '../lib/api';
 import { useToastStore } from '../stores/toasts';
 
 const route = useRoute();
-const toast = useToastStore();
+const toasts = useToastStore();
 const customer = ref(null);
+const contacts = ref([]);
 const activities = ref([]);
-const error = ref('');
 const tab = ref('contacts');
-const contactForm = ref({ first_name: '', last_name: '', email: '', phone: '', position: '' });
-const activityForm = ref({ type: 'note', description: '' });
+const error = ref('');
+const busy = ref(false);
+const contactForm = ref(false);
+const editing = ref(null);
+const contact = reactive({ first_name: '', last_name: '', email: '', phone: '', position: '', tags: '' });
+const activity = reactive({ type: 'note', description: '' });
+const customerId = computed(() => route.params.id);
+const detailUrl = computed(() => '/api/v1/customers/' + customerId.value);
+
 async function load() {
+  error.value = '';
   try {
-    const id = route.params.id;
-    customer.value = (await api.get('/api/v1/customers/' + id)).data.data;
-    activities.value = (await api.get('/api/v1/customers/' + id + '/activities')).data.data;
-  } catch (e) { error.value = errorText(e); }
+    const [details, people, history] = await Promise.all([
+      api.get(detailUrl.value),
+      api.get(detailUrl.value + '/contacts'),
+      api.get(detailUrl.value + '/activities'),
+    ]);
+    customer.value = details.data.data;
+    contacts.value = people.data.data;
+    activities.value = history.data.data;
+  } catch (reason) { error.value = errorText(reason); }
 }
-async function addContact() {
+function openContact(record = null) {
+  editing.value = record;
+  Object.assign(contact, {
+    first_name: record?.first_name || '', last_name: record?.last_name || '',
+    email: record?.email || '', phone: record?.phone || '', position: record?.position || '',
+    tags: (record?.tags || []).join(', '),
+  });
+  contactForm.value = true;
+  tab.value = 'contacts';
+}
+async function saveContact() {
+  busy.value = true;
   try {
-    await api.post('/api/v1/customers/' + route.params.id + '/contacts', contactForm.value);
-    toast.push('Contact added');
-    contactForm.value = { first_name: '', last_name: '', email: '', phone: '', position: '' };
+    const payload = { ...contact, tags: contact.tags.split(',').map(t => t.trim()).filter(Boolean) };
+    if (editing.value) await api.patch('/api/v1/contacts/' + editing.value.id, payload);
+    else await api.post(detailUrl.value + '/contacts', payload);
+    toasts.push('Contact saved.');
+    contactForm.value = false;
     await load();
-  } catch (e) { error.value = errorText(e); }
+  } catch (reason) { error.value = errorText(reason); }
+  finally { busy.value = false; }
+}
+async function deleteContact(record) {
+  if (!confirm('Delete this contact?')) return;
+  try { await api.delete('/api/v1/contacts/' + record.id); toasts.push('Contact removed.'); await load(); }
+  catch (reason) { error.value = errorText(reason); }
 }
 async function logActivity() {
+  busy.value = true;
   try {
-    await api.post('/api/v1/customers/' + route.params.id + '/activities', activityForm.value);
-    toast.push('Activity recorded');
-    activityForm.value.description = '';
+    await api.post(detailUrl.value + '/activities', activity);
+    activity.description = '';
+    toasts.push('Activity added.');
     await load();
-  } catch (e) { error.value = errorText(e); }
+    tab.value = 'activity';
+  } catch (reason) { error.value = errorText(reason); }
+  finally { busy.value = false; }
 }
-async function removeContact(id) {
-  if (!confirm('Delete this contact?')) return;
-  try {
-    await api.delete('/api/v1/contacts/' + id);
-    await load();
-  } catch (e) { error.value = errorText(e); }
-}
+watch(customerId, load);
 onMounted(load);
 </script>
+
 <template>
-  <main class="mx-auto max-w-5xl p-6 lg:p-10">
-    <RouterLink to="/customers" class="text-sm font-medium text-indigo-700">← All customers</RouterLink>
-    <p v-if="error" role="alert" class="mt-4 text-rose-700">{{ error }}</p>
+  <main class="mx-auto max-w-6xl space-y-6 p-6 lg:p-10">
+    <RouterLink to="/customers" class="text-sm font-semibold text-indigo-700">← All customers</RouterLink>
+    <p v-if="error" role="alert" class="rounded-lg bg-rose-50 p-4 text-rose-800">{{ error }}</p>
     <template v-if="customer">
-      <header class="my-7 rounded-xl border border-slate-200 bg-white p-6">
-        <h1 class="text-3xl font-bold">{{ customer.name }}</h1>
-        <p class="mt-3 text-slate-500">{{ customer.email }} · {{ customer.phone }}</p>
-        <p class="mt-2 text-sm capitalize text-slate-600">{{ customer.status }}</p>
+      <header class="rounded-xl border bg-white p-6">
+        <p class="text-xs font-bold uppercase tracking-wide text-indigo-600">Customer 360°</p>
+        <h1 class="mt-2 text-3xl font-bold">{{ customer.name }}</h1>
+        <p class="mt-2 text-slate-600">{{ customer.email || 'No email recorded' }} · {{ customer.phone || 'No phone' }}</p>
+        <div class="mt-3 flex flex-wrap gap-2">
+          <span class="rounded-full bg-green-50 px-3 py-1 text-xs font-semibold text-green-800">{{ customer.status }}</span>
+          <span v-for="tag in customer.tags" :key="tag" class="rounded-full bg-indigo-50 px-3 py-1 text-xs text-indigo-700">{{ tag }}</span>
+        </div>
       </header>
-      <nav aria-label="Customer detail tabs" class="mb-5 flex gap-3 border-b border-slate-200">
-        <button v-for="name in ['contacts','activity']" :key="name" class="border-b-2 px-3 py-3 text-sm font-semibold capitalize"
-          :class="tab === name ? 'border-indigo-600 text-indigo-700' : 'border-transparent text-slate-500'" @click="tab = name">{{ name }}</button>
-      </nav>
-      <template v-if="tab === 'contacts'">
-        <section class="rounded-xl border border-slate-200 bg-white p-6">
-          <h2 class="mb-4 text-xl font-semibold">Contacts</h2>
-          <ul class="divide-y divide-slate-100">
-            <li v-for="person in customer.contacts" :key="person.id" class="flex flex-wrap justify-between gap-3 py-4 text-sm">
-              <div><strong>{{ person.first_name }} {{ person.last_name }}</strong>
-                <p class="text-slate-500">{{ person.position }} · {{ person.email }}</p></div>
-              <button class="text-rose-700" @click="removeContact(person.id)">Delete</button>
-            </li>
-          </ul>
-          <form class="mt-5 grid gap-3 border-t border-slate-200 pt-5 sm:grid-cols-2" @submit.prevent="addContact">
-            <label class="grid gap-1 text-sm">First name <input v-model="contactForm.first_name" required class="rounded-lg border p-2"></label>
-            <label class="grid gap-1 text-sm">Last name <input v-model="contactForm.last_name" required class="rounded-lg border p-2"></label>
-            <label class="grid gap-1 text-sm">Email <input v-model="contactForm.email" type="email" class="rounded-lg border p-2"></label>
-            <label class="grid gap-1 text-sm">Phone <input v-model="contactForm.phone" class="rounded-lg border p-2"></label>
-            <button class="rounded-lg bg-indigo-600 px-4 py-2 text-white sm:col-span-2">Add contact</button>
-          </form>
-        </section>
-      </template>
-      <section v-else class="rounded-xl border border-slate-200 bg-white p-6">
-        <h2 class="mb-4 text-xl font-semibold">Customer timeline</h2>
+      <div role="tablist" aria-label="Customer details" class="flex gap-3 border-b">
+        <button id="contacts-tab" role="tab" :aria-selected="tab === 'contacts'" @click="tab = 'contacts'" :class="tab === 'contacts' ? 'border-indigo-700 text-indigo-700' : 'border-transparent text-slate-600'" class="border-b-2 px-4 py-3 font-semibold">Contacts ({{ contacts.length }})</button>
+        <button id="activity-tab" role="tab" :aria-selected="tab === 'activity'" @click="tab = 'activity'" :class="tab === 'activity' ? 'border-indigo-700 text-indigo-700' : 'border-transparent text-slate-600'" class="border-b-2 px-4 py-3 font-semibold">Activity feed</button>
+      </div>
+      <section v-if="tab === 'contacts'" role="tabpanel" aria-labelledby="contacts-tab" class="space-y-4">
+        <button @click="openContact()" class="rounded-lg bg-indigo-700 px-4 py-2 font-semibold text-white">+ Add contact</button>
+        <form v-if="contactForm" @submit.prevent="saveContact" class="grid gap-3 rounded-xl border bg-white p-5 sm:grid-cols-2">
+          <h2 class="text-lg font-bold sm:col-span-2">{{ editing ? 'Edit contact' : 'New contact' }}</h2>
+          <label class="text-sm">First name *<input v-model.trim="contact.first_name" required maxlength="120" class="mt-1 block w-full rounded border p-2"></label>
+          <label class="text-sm">Last name *<input v-model.trim="contact.last_name" required maxlength="120" class="mt-1 block w-full rounded border p-2"></label>
+          <label class="text-sm">Email<input v-model.trim="contact.email" type="email" class="mt-1 block w-full rounded border p-2"></label>
+          <label class="text-sm">Phone<input v-model.trim="contact.phone" class="mt-1 block w-full rounded border p-2"></label>
+          <label class="text-sm">Position<input v-model.trim="contact.position" class="mt-1 block w-full rounded border p-2"></label>
+          <label class="text-sm">Tags<input v-model="contact.tags" placeholder="decision-maker, executive" class="mt-1 block w-full rounded border p-2"></label>
+          <div class="flex gap-2 sm:col-span-2"><button :disabled="busy" class="rounded-lg bg-indigo-700 px-4 py-2 text-white disabled:opacity-50">Save contact</button><button type="button" @click="contactForm = false" class="rounded-lg border px-4 py-2">Cancel</button></div>
+        </form>
+        <article v-for="person in contacts" :key="person.id" class="flex flex-wrap items-center justify-between gap-3 rounded-xl border bg-white p-5">
+          <div><h3 class="font-bold">{{ person.first_name }} {{ person.last_name }}</h3><p class="text-sm text-slate-600">{{ person.position }} · {{ person.email }}</p><p class="text-xs text-slate-500">{{ person.phone }}</p></div>
+          <div class="flex gap-3 text-sm"><button @click="openContact(person)" class="text-indigo-700">Edit</button><button @click="deleteContact(person)" class="text-rose-700">Delete</button></div>
+        </article>
+        <p v-if="!contacts.length" class="text-slate-500">No contacts have been added yet.</p>
+      </section>
+      <section v-else role="tabpanel" aria-labelledby="activity-tab" class="space-y-5">
+        <form @submit.prevent="logActivity" class="rounded-xl border bg-white p-5">
+          <h2 class="text-lg font-semibold">Log an interaction</h2>
+          <div class="mt-4 grid gap-3 sm:grid-cols-4">
+            <label class="text-sm">Type<select v-model="activity.type" class="mt-1 block w-full rounded border p-2"><option value="call">Call</option><option value="note">Note</option><option value="email">Email</option><option value="meeting">Meeting</option></select></label>
+            <label class="text-sm sm:col-span-3">Details<textarea v-model.trim="activity.description" required maxlength="3000" rows="2" class="mt-1 block w-full rounded border p-2"></textarea></label>
+          </div>
+          <button :disabled="busy" class="mt-4 rounded-lg bg-indigo-700 px-4 py-2 text-white disabled:opacity-50">Save activity</button>
+        </form>
         <ol class="space-y-3">
-          <li v-for="event in activities" :key="event.id" class="rounded-lg bg-slate-50 p-4">
-            <span class="text-xs font-semibold uppercase text-indigo-600">{{ event.type }}</span>
-            <p class="mt-1">{{ event.description }}</p>
-            <time class="text-xs text-slate-500">{{ new Date(event.created_at).toLocaleString() }}</time>
+          <li v-for="item in activities" :key="item.id" class="rounded-xl border bg-white p-5">
+            <div class="flex items-center justify-between"><strong class="capitalize">{{ item.type.replaceAll('_', ' ') }}</strong><time class="text-sm text-slate-500">{{ new Date(item.created_at).toLocaleString() }}</time></div>
+            <p class="mt-2 whitespace-pre-wrap text-sm text-slate-700">{{ item.description }}</p>
           </li>
         </ol>
-        <form class="mt-6 grid gap-3 border-t pt-5" @submit.prevent="logActivity">
-          <label class="grid gap-1 text-sm">Activity type
-            <select v-model="activityForm.type" class="rounded-lg border p-2"><option value="note">Note</option><option value="call">Call</option><option value="email">Email</option><option value="meeting">Meeting</option></select></label>
-          <label class="grid gap-1 text-sm">Description
-            <textarea v-model="activityForm.description" required maxlength="3000" rows="3" class="rounded-lg border p-2"></textarea></label>
-          <button class="rounded-lg bg-indigo-600 px-4 py-2 text-white">Save activity</button>
-        </form>
+        <p v-if="!activities.length" class="text-slate-500">No interactions logged yet.</p>
       </section>
     </template>
+    <p v-else-if="!error" class="text-slate-500">Loading customer…</p>
   </main>
 </template>
