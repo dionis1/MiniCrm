@@ -1,58 +1,56 @@
 <script setup>
-import { reactive, ref } from 'vue';
-import { useRouter, useRoute } from 'vue-router';
+import { ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
-import { validationMessage } from '../lib/api';
+import { useToastStore } from '../stores/toasts';
+import { errorText } from '../lib/api';
 
-const router = useRouter();
-const route = useRoute();
 const auth = useAuthStore();
+const toast = useToastStore();
+const route = useRoute();
+const router = useRouter();
 const registering = ref(false);
-const busy = ref(false);
+const submitting = ref(false);
 const error = ref('');
-const form = reactive({ name: '', email: '', password: '', password_confirmation: '' });
+const form = ref({ name: '', email: '', password: '', password_confirmation: '' });
 
 async function submit() {
-  busy.value = true;
+  submitting.value = true;
   error.value = '';
   try {
-    if (registering.value) await auth.register(form);
-    else await auth.login(form.email, form.password);
-    const destination = typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/') && !route.query.redirect.startsWith('//')
-      ? route.query.redirect : '/dashboard';
-    await router.replace(destination);
-  } catch (exception) {
-    error.value = validationMessage(exception);
-  } finally {
-    busy.value = false;
-  }
+    if (registering.value) await auth.register(form.value);
+    else await auth.login({ email: form.value.email, password: form.value.password });
+    toast.push(registering.value ? 'Account created.' : 'Welcome back!');
+    await router.replace(typeof route.query.redirect === 'string' && route.query.redirect.startsWith('/') ? route.query.redirect : '/dashboard');
+  } catch (reason) {
+    error.value = errorText(reason);
+  } finally { submitting.value = false; }
 }
 </script>
-
 <template>
-  <main class="mx-auto max-w-md px-6 py-16">
-    <div class="rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
-      <h1 class="text-2xl font-bold">{{ registering ? 'Create your MiniCRM account' : 'Sign in to MiniCRM' }}</h1>
-      <p class="mt-2 text-sm text-slate-600">Your sales workspace, securely managed with Laravel Sanctum.</p>
-      <div v-if="error" role="alert" class="mt-5 rounded-lg bg-red-50 p-3 text-sm text-red-800">{{ error }}</div>
-      <form class="mt-6 space-y-4" @submit.prevent="submit">
-        <label v-if="registering" class="block text-sm font-medium">Name
-          <input v-model.trim="form.name" required maxlength="120" autocomplete="name" class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2">
-        </label>
-        <label class="block text-sm font-medium">Email
-          <input v-model.trim="form.email" type="email" required autocomplete="email" class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2">
-        </label>
-        <label class="block text-sm font-medium">Password
-          <input v-model="form.password" type="password" required :minlength="registering ? 12 : undefined" :autocomplete="registering ? 'new-password' : 'current-password'" class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2">
-        </label>
-        <label v-if="registering" class="block text-sm font-medium">Confirm password
-          <input v-model="form.password_confirmation" type="password" required minlength="12" autocomplete="new-password" class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2">
-        </label>
-        <button :disabled="busy" type="submit" class="w-full rounded-lg bg-indigo-700 px-4 py-2.5 font-semibold text-white hover:bg-indigo-800 disabled:opacity-50">{{ busy ? 'Please wait…' : registering ? 'Create account' : 'Sign in' }}</button>
+  <main class="flex min-h-screen items-center justify-center px-5 py-12">
+    <section class="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+      <h1 class="text-3xl font-bold">◈ MiniCRM</h1>
+      <p class="mt-2 text-slate-600">{{ registering ? 'Create your account' : 'Sign in to your workspace' }}</p>
+      <form class="mt-8 grid gap-4" @submit.prevent="submit">
+        <label v-if="registering" class="grid gap-1 text-sm font-medium">Name
+          <input v-model="form.name" required maxlength="120" class="rounded-lg border border-slate-300 p-3"></label>
+        <label class="grid gap-1 text-sm font-medium">Email
+          <input v-model="form.email" type="email" required autocomplete="email" class="rounded-lg border border-slate-300 p-3"></label>
+        <label class="grid gap-1 text-sm font-medium">Password
+          <input v-model="form.password" type="password" required :minlength="registering ? 12 : 1"
+            :autocomplete="registering ? 'new-password' : 'current-password'" class="rounded-lg border border-slate-300 p-3"></label>
+        <label v-if="registering" class="grid gap-1 text-sm font-medium">Confirm password
+          <input v-model="form.password_confirmation" type="password" required minlength="12" autocomplete="new-password"
+            class="rounded-lg border border-slate-300 p-3"></label>
+        <p v-if="error" role="alert" class="rounded-lg bg-rose-50 p-3 text-sm text-rose-800">{{ error }}</p>
+        <button :disabled="submitting" class="rounded-lg bg-indigo-600 p-3 font-semibold text-white disabled:opacity-50">
+          {{ submitting ? 'Please wait…' : registering ? 'Create account' : 'Sign in' }}
+        </button>
       </form>
-      <button type="button" @click="registering = !registering; error = ''" class="mt-5 text-sm font-medium text-indigo-700">
+      <button type="button" class="mt-6 text-sm font-medium text-indigo-700 hover:underline" @click="registering = !registering; error = ''">
         {{ registering ? 'Already have an account? Sign in' : 'New here? Create an account' }}
       </button>
-    </div>
+    </section>
   </main>
 </template>
