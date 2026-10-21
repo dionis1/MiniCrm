@@ -91,6 +91,9 @@ class LeadApiTest extends TestCase
         $this->postJson('/api/v1/leads/'.$lead->id.'/convert', ['version' => 1])
             ->assertStatus(409);
         $this->assertDatabaseCount('companies', 0);
+        $this->patchJson('/api/v1/leads/'.$lead->id, ['name' => 'Reopened', 'version' => 1])
+            ->assertStatus(409);
+        $this->assertSame('One-time conversion', $lead->fresh()->name);
         $this->assertNotNull($lead->fresh()->converted_at);
     }
 }
