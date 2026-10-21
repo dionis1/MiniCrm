@@ -21,6 +21,7 @@ class LeadController extends Controller
             'q' => ['nullable', 'string', 'max:100'],
             'stage' => ['nullable', Rule::in(Lead::STAGES)],
             'sort' => ['nullable', Rule::in(['created_at', 'name', 'deal_value'])],
+            'per_page' => ['nullable', 'integer', 'between:1,100'],
             'direction' => ['nullable', Rule::in(['asc', 'desc'])],
         ]);
         $query = Lead::where('user_id', $request->user()->id);
@@ -37,7 +38,7 @@ class LeadController extends Controller
 
         return LeadResource::collection($query
             ->orderBy($filters['sort'] ?? 'created_at', $filters['direction'] ?? 'desc')
-            ->paginate(20)->withQueryString());
+            ->paginate($filters['per_page'] ?? 20)->withQueryString());
     }
 
     public function store(LeadRequest $request, ManageLead $action): JsonResponse

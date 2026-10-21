@@ -1,139 +1,171 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue';
-import api, { validationMessage } from '../lib/api';
-import KanbanBoard from '../components/KanbanBoard.vue';
-import LeadForm from '../components/LeadForm.vue';
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
+import Sortable from 'sortablejs';
+import { api, errorText } from '../lib/api';
+import { useToastStore } from '../stores/toasts';
 
-const items = ref([]);
-const boardItems = ref([]);
-const boardRevision = ref(0);
-const view = ref('list');
-const query = ref('');
-const stage = ref('');
-const page = ref(1);
-const lastPage = ref(1);
+const toasts = useToastStore();
+const stages = [
+  { id: 'new', label: 'New lead', accent: 'border-slate-400' },
+  { id: 'contacted', label: 'Contacted', accent: 'border-blue-400' },
+  { id: 'proposal', label: 'Proposal sent', accent: 'border-amber-400' },
+  { id: 'closed_won', label: 'Closed won', accent: 'border-emerald-400' },
+  { id: 'closed_lost', label: 'Closed lost', accent: 'border-rose-400' },
+];
+const leads = ref([]);
+const search = ref('');
 const busy = ref(false);
 const saving = ref(false);
 const error = ref('');
-const success = ref('');
-const editing = ref(undefined);
-const stages = ['new', 'contacted', 'proposal', 'closed_won', 'closed_lost'];
-const money = (value) => Number(value || 0).toLocaleString(undefined, { style: 'currency', currency: 'EUR' });
-const hasPrev = computed(() => page.value > 1);
-
+const modal = ref(false);
+const editing = ref(null);
+const form = ref(empty());
+const stageElements = ref({});
+let instances = [];
+function empty() {
+  return { name: '', company_name: '', email: '', phone: '', stage: 'new', deal_value: 0, probability: 10 };
+}
+const filtered = computed(() => leads.value.filter(lead =>
+  [lead.name, lead.company_name, lead.email].some(s => (s || '').toLowerCase().includes(search.value.toLowerCase()))
+));
+const byStage = id => filtered.value.filter(l => l.stage === id);
+const total = id => byStage(id).reduce((sum, l) => sum + Number(l.deal_value || 0), 0);
+function setStageEl(el, id) { if (el) stageElements.value[id] = el; }
 async function load() {
   busy.value = true;
-  error.value = '';
   try {
-    if (view.value === 'board') {
-      const results = [];
-      let cursor = 1;
-      let totalPages = 1;
-      do {
-        const { data } = await api.get('/api/v1/leads', { params: { page: cursor, q: query.value || undefined, stage: stage.value || undefined } });
-        results.push(...data.data);
-        totalPages = data.meta?.last_page ?? 1;
-        cursor += 1;
-      } while (cursor <= totalPages);
-      boardItems.value = results;
-      boardRevision.value += 1;
-    } else {
-      const { data } = await api.get('/api/v1/leads', { params: { page: page.value, q: query.value || undefined, stage: stage.value || undefined } });
-      items.value = data.data;
-      lastPage.value = data.meta?.last_page || 1;
-    }
-  } catch (exception) {
-    error.value = validationMessage(exception);
-  } finally {
-    busy.value = false;
+    const { data } = await api.get('/api/v1/leads', { params: { per_page: 100 } });
+    leads.value = data.data;
+    await nextTick();
+    instances.forEach(instance => instance.destroy());
+    instances = stages.map(stage => Sortable.create(stageElements.value[stage.id], {
+      group: 'pipeline',
+      animation: 180,
+      draggable: '[data-lead-id]',
+      ghostClass: 'opacity-50',
+      onEnd: event => moved(event),
+    }));
+  } catch (e) {
+    error.value = errorText(e);
+  } finally { busy.value = false; }
+}
+async function moved(evt) {
+  if (evt.from === evt.to) return;
+  const lead = leads.value.find(x => String(x.id) === evt.item.dataset.leadId);
+  const nextStage = evt.to.dataset.stage;
+  // Restore Sortable's DOM mutation before Vue updates its keyed children.
+  const sibling = evt.from.children[evt.oldIndex] || null;
+  evt.from.insertBefore(evt.item, sibling);
+  if (!lead || !nextStage || lead.converted_customer_id) return;
+  const oldStage = lead.stage;
+  lead.stage = nextStage;
+  try {
+    const { data } = await api.patch('/api/v1/leads/' + lead.id + '/stage', { stage: nextStage, version: lead.version });
+    Object.assign(lead, data.data);
+    toasts.push('Lead moved to ' + nextStage.replace('_', ' '));
+  } catch (e) {
+    lead.stage = oldStage;
+    toasts.push(errorText(e), 'error');
+    if (e.response?.status === 409) await load();
   }
 }
-watch([view, stage], () => { page.value = 1; load(); });
-onMounted(load);
-
-async function save(values) {
+function create() { editing.value = null; form.value = empty(); modal.value = true; }
+function edit(lead) {
+  editing.value = lead;
+  form.value = { ...lead };
+  modal.value = true;
+}
+async function save() {
   saving.value = true;
   error.value = '';
   try {
-    if (editing.value) await api.patch('/api/v1/leads/' + editing.value.id, values);
-    else { delete values.version; await api.post('/api/v1/leads', values); }
-    editing.value = undefined;
-    success.value = 'Lead saved successfully.';
+    if (editing.value) {
+      await api.patch('/api/v1/leads/' + editing.value.id, form.value);
+    } else {
+      await api.post('/api/v1/leads', form.value);
+    }
+    modal.value = false;
+    toasts.push(editing.value ? 'Lead updated' : 'Lead created');
     await load();
-  } catch (exception) { error.value = validationMessage(exception); }
+  } catch (e) { error.value = errorText(e); }
   finally { saving.value = false; }
 }
-async function move({ id, stage: nextStage }) {
-  const old = boardItems.value.find((lead) => lead.id === id);
-  if (!old || old.stage === nextStage) { boardRevision.value += 1; return; }
-  const before = { ...old };
-  boardItems.value = boardItems.value.map((lead) => lead.id === id ? { ...lead, stage: nextStage } : lead);
-  boardRevision.value += 1;
-  try {
-    const { data } = await api.patch('/api/v1/leads/' + id + '/stage', { stage: nextStage, version: before.version });
-    boardItems.value = boardItems.value.map((lead) => lead.id === id ? data.data : lead);
-    success.value = 'Pipeline updated.';
-  } catch (exception) {
-    boardItems.value = boardItems.value.map((lead) => lead.id === id ? before : lead);
-    error.value = validationMessage(exception);
-  } finally { boardRevision.value += 1; }
-}
 async function convert(lead) {
-  if (!confirm('Convert this lead into a customer and contact?')) return;
+  if (!window.confirm('Convert this lead into a customer?')) return;
   try {
-    await api.post('/api/v1/leads/' + lead.id + '/convert', { version: lead.version });
-    success.value = 'Customer created from lead.';
+    const { data } = await api.post('/api/v1/leads/' + lead.id + '/convert', { version: lead.version });
+    toasts.push('Customer created: ' + data.data.name);
     await load();
-  } catch (exception) { error.value = validationMessage(exception); }
+  } catch (e) {
+    toasts.push(errorText(e), 'error');
+    if (e.response?.status === 409) await load();
+  }
 }
-async function remove(lead) {
-  if (!confirm('Delete this lead permanently?')) return;
-  try {
-    await api.delete('/api/v1/leads/' + lead.id);
-    success.value = 'Lead deleted.';
-    await load();
-  } catch (exception) { error.value = validationMessage(exception); }
-}
+onMounted(load);
+onUnmounted(() => instances.forEach(instance => instance.destroy()));
 </script>
 
 <template>
-  <main class="mx-auto max-w-7xl space-y-6 px-6 py-10">
-    <header class="flex flex-wrap items-center justify-between gap-4">
-      <div><h1 class="text-3xl font-bold">Leads & pipeline</h1><p class="mt-1 text-slate-600">Track opportunities and convert them into customers.</p></div>
-      <button type="button" @click="editing = null" class="rounded-lg bg-indigo-700 px-4 py-2 font-semibold text-white">+ New lead</button>
-    </header>
-    <p v-if="error" role="alert" class="rounded-lg bg-red-50 p-3 text-red-800">{{ error }}</p>
-    <p v-if="success" role="status" class="rounded-lg bg-green-50 p-3 text-green-800">{{ success }}</p>
-
-    <section v-if="editing !== undefined" class="rounded-xl border bg-white p-6">
-      <h2 class="mb-4 text-xl font-bold">{{ editing ? 'Edit lead' : 'New lead' }}</h2>
-      <LeadForm :lead="editing" :saving="saving" @save="save" @cancel="editing = undefined" />
-    </section>
-
-    <div class="flex flex-wrap items-end gap-3">
-      <label class="text-sm font-medium">Search leads<input v-model="query" @keyup.enter="page = 1; load()" maxlength="100" placeholder="Name, company or email" class="mt-1 block rounded-lg border bg-white px-3 py-2"></label>
-      <label class="text-sm font-medium">Stage<select v-model="stage" class="mt-1 block rounded-lg border bg-white px-3 py-2"><option value="">All stages</option><option v-for="s in stages" :key="s" :value="s">{{ s.replaceAll('_', ' ') }}</option></select></label>
-      <button @click="page = 1; load()" class="rounded-lg border bg-white px-4 py-2">Search</button>
-      <div class="ml-auto flex gap-2">
-        <button @click="view = 'list'" :aria-pressed="view === 'list'" class="rounded-lg border px-4 py-2" :class="view === 'list' ? 'bg-indigo-700 text-white' : 'bg-white'">List</button>
-        <button @click="view = 'board'" :aria-pressed="view === 'board'" class="rounded-lg border px-4 py-2" :class="view === 'board' ? 'bg-indigo-700 text-white' : 'bg-white'">Kanban</button>
-      </div>
+  <main class="mx-auto max-w-[1600px] p-6 lg:p-10">
+    <div class="mb-8 flex flex-wrap items-center justify-between gap-4">
+      <div><p class="text-xs font-bold uppercase tracking-wider text-indigo-600">Opportunity management</p>
+        <h1 class="mt-1 text-3xl font-bold">Sales pipeline</h1>
+        <p class="mt-2 text-sm text-slate-500">Drag cards between stages. Failed changes are rolled back automatically.</p></div>
+      <button type="button" class="rounded-lg bg-indigo-600 px-5 py-3 font-semibold text-white" @click="create">+ New lead</button>
     </div>
-    <p v-if="busy" role="status" class="text-sm text-slate-600">Loading leads…</p>
-    <KanbanBoard v-if="view === 'board' && !busy" :key="boardRevision" :leads="boardItems" @stage="move" @edit="editing = $event" />
-    <section v-if="view === 'list' && !busy" class="overflow-x-auto rounded-xl border bg-white">
-      <table class="w-full min-w-[720px] text-left text-sm">
-        <thead class="border-b bg-slate-50 text-slate-600"><tr><th class="p-4">Name / company</th><th>Stage</th><th>Deal value</th><th>Expected value</th><th>Actions</th></tr></thead>
-        <tbody>
-          <tr v-for="lead in items" :key="lead.id" class="border-b last:border-0">
-            <td class="p-4"><strong>{{ lead.name }}</strong><p class="text-slate-500">{{ lead.company_name || lead.email }}</p></td>
-            <td>{{ lead.stage.replaceAll('_', ' ') }}</td><td>{{ money(lead.deal_value) }}</td><td>{{ money(lead.expected_value) }}</td>
-            <td class="space-x-3"><button class="text-indigo-700" @click="editing = lead">Edit</button><button v-if="!lead.converted_customer_id" class="text-green-700" @click="convert(lead)">Convert</button><button class="text-red-700" @click="remove(lead)">Delete</button></td>
-          </tr>
-          <tr v-if="!items.length"><td colspan="5" class="p-8 text-center text-slate-500">No leads found.</td></tr>
-        </tbody>
-      </table>
-      <footer class="flex items-center justify-between p-4"><button :disabled="!hasPrev" @click="page--; load()" class="rounded border px-3 py-1 disabled:opacity-40">Previous</button><span>Page {{ page }} / {{ lastPage }}</span><button :disabled="page >= lastPage" @click="page++; load()" class="rounded border px-3 py-1 disabled:opacity-40">Next</button></footer>
-    </section>
+    <label class="mb-6 block max-w-md text-sm font-medium">
+      <span class="sr-only">Filter leads</span>
+      <input v-model="search" type="search" placeholder="Find leads by name, email or company"
+        class="w-full rounded-lg border border-slate-300 bg-white px-4 py-3">
+    </label>
+    <p v-if="error && !modal" role="alert" class="mb-4 text-rose-700">{{ error }}</p>
+    <p v-if="busy" class="mb-4 text-slate-500">Loading pipeline…</p>
+    <div class="flex gap-4 overflow-x-auto pb-6" aria-label="Lead pipeline">
+      <section v-for="stage in stages" :key="stage.id" class="w-64 shrink-0 rounded-xl bg-slate-100 p-3">
+        <header class="mb-3 rounded-lg border-t-4 bg-white p-3 shadow-sm" :class="stage.accent">
+          <div class="flex justify-between gap-1 text-sm font-semibold"><h2>{{ stage.label }}</h2><span>{{ byStage(stage.id).length }}</span></div>
+          <p class="mt-2 text-xs text-slate-500">${{ total(stage.id).toLocaleString() }}</p>
+        </header>
+        <div :ref="el => setStageEl(el, stage.id)" :data-stage="stage.id" class="min-h-36 space-y-2">
+          <article v-for="lead in byStage(stage.id)" :key="lead.id" :data-lead-id="lead.id"
+            class="lead-item cursor-grab rounded-lg border border-slate-200 bg-white p-4 shadow-sm active:cursor-grabbing">
+            <button type="button" class="text-left font-semibold text-slate-900 hover:text-indigo-700" @click="edit(lead)">{{ lead.name }}</button>
+            <p class="mt-1 text-xs text-slate-500">{{ lead.company_name || 'Individual' }}</p>
+            <p class="mt-3 text-sm font-semibold">${{ Number(lead.deal_value).toLocaleString() }}
+              <span class="ml-1 font-normal text-slate-500">· {{ lead.probability }}%</span></p>
+            <p class="text-xs text-slate-500">Expected: ${{ Number(lead.expected_value).toLocaleString() }}</p>
+            <button v-if="stage.id === 'closed_won' && !lead.converted_customer_id" type="button"
+              class="mt-3 text-xs font-semibold text-emerald-700 hover:underline" @click="convert(lead)">Convert to customer →</button>
+            <span v-if="lead.converted_customer_id" class="mt-3 block text-xs text-emerald-700">Converted ✓</span>
+          </article>
+        </div>
+      </section>
+    </div>
+    <p class="text-xs text-slate-500">Showing the latest {{ leads.length }} leads. Use search and filters for larger pipelines.</p>
+
+    <div v-if="modal" class="fixed inset-0 z-30 flex items-center justify-center bg-slate-950/60 px-4" @click.self="modal = false">
+      <section role="dialog" aria-modal="true" aria-labelledby="lead-modal-title" class="w-full max-w-lg rounded-xl bg-white p-6 shadow-xl">
+        <div class="flex justify-between"><h2 id="lead-modal-title" class="text-xl font-bold">{{ editing ? 'Edit lead' : 'New lead' }}</h2>
+          <button type="button" aria-label="Close" @click="modal = false">✕</button></div>
+        <form class="mt-5 grid gap-4" @submit.prevent="save">
+          <label class="grid gap-1 text-sm font-medium">Name <input v-model="form.name" required maxlength="160" class="rounded-lg border border-slate-300 p-2"></label>
+          <label class="grid gap-1 text-sm font-medium">Company <input v-model="form.company_name" maxlength="160" class="rounded-lg border border-slate-300 p-2"></label>
+          <div class="grid gap-3 sm:grid-cols-2">
+            <label class="grid gap-1 text-sm font-medium">Email <input v-model="form.email" type="email" class="rounded-lg border border-slate-300 p-2"></label>
+            <label class="grid gap-1 text-sm font-medium">Phone <input v-model="form.phone" class="rounded-lg border border-slate-300 p-2"></label>
+            <label class="grid gap-1 text-sm font-medium">Deal value <input v-model.number="form.deal_value" type="number" min="0" step=".01" class="rounded-lg border border-slate-300 p-2"></label>
+            <label class="grid gap-1 text-sm font-medium">Probability (%) <input v-model.number="form.probability" type="number" min="0" max="100" class="rounded-lg border border-slate-300 p-2"></label>
+          </div>
+          <label class="grid gap-1 text-sm font-medium">Stage <select v-model="form.stage" class="rounded-lg border border-slate-300 p-2">
+            <option v-for="stage in stages" :key="stage.id" :value="stage.id">{{ stage.label }}</option>
+          </select></label>
+          <p v-if="error" role="alert" class="text-sm text-rose-700">{{ error }}</p>
+          <div class="flex justify-end gap-2">
+            <button type="button" class="rounded-lg border border-slate-300 px-4 py-2" @click="modal = false">Cancel</button>
+            <button type="submit" :disabled="saving" class="rounded-lg bg-indigo-600 px-5 py-2 font-semibold text-white disabled:opacity-50">{{ saving ? 'Saving…' : 'Save lead' }}</button>
+          </div>
+        </form>
+      </section>
+    </div>
   </main>
 </template>
