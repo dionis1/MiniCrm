@@ -2,6 +2,7 @@
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue';
 import Sortable from 'sortablejs';
 import { api, errorText } from '../lib/api';
+import { filterLeads, totalDealValue } from '../lib/pipeline';
 import { useToastStore } from '../stores/toasts';
 
 const toasts = useToastStore();
@@ -25,11 +26,9 @@ let instances = [];
 function empty() {
   return { name: '', company_name: '', email: '', phone: '', stage: 'new', deal_value: 0, probability: 10 };
 }
-const filtered = computed(() => leads.value.filter(lead =>
-  [lead.name, lead.company_name, lead.email].some(s => (s || '').toLowerCase().includes(search.value.toLowerCase()))
-));
+const filtered = computed(() => filterLeads(leads.value, search.value));
 const byStage = id => filtered.value.filter(l => l.stage === id);
-const total = id => byStage(id).reduce((sum, l) => sum + Number(l.deal_value || 0), 0);
+const total = id => totalDealValue(byStage(id));
 function setStageEl(el, id) { if (el) stageElements.value[id] = el; }
 async function load() {
   busy.value = true;
