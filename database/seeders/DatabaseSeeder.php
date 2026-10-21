@@ -8,6 +8,6 @@ class DatabaseSeeder extends Seeder
 {
     public function run(): void
     {
-        // No default accounts or passwords.
+        $this->call(DemoSeeder::class);
     }
 }
