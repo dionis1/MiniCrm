@@ -59,4 +59,22 @@ class LeadApiTest extends TestCase
         $this->patchJson('/api/v1/leads/'.$lead->id.'/stage', ['stage' => 'proposal', 'version' => 0])->assertNotFound();
         $this->getJson('/api/v1/leads')->assertJsonCount(0, 'data');
     }
+    public function test_lead_page_size_is_bounded_for_kanban_clients(): void
+    {
+        $owner = User::factory()->create();
+        Sanctum::actingAs($owner);
+
+        foreach (range(1, 3) as $number) {
+            Lead::create(['user_id' => $owner->id, 'name' => 'Prospect '.$number]);
+        }
+
+        $this->getJson('/api/v1/leads?per_page=2')
+            ->assertOk()
+            ->assertJsonCount(2, 'data')
+            ->assertJsonPath('meta.per_page', 2);
+        $this->getJson('/api/v1/leads?per_page=101')
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('per_page');
+    }
+
 }
