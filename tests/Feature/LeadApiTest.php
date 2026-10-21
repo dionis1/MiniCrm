@@ -59,6 +59,7 @@ class LeadApiTest extends TestCase
         $this->patchJson('/api/v1/leads/'.$lead->id.'/stage', ['stage' => 'proposal', 'version' => 0])->assertNotFound();
         $this->getJson('/api/v1/leads')->assertJsonCount(0, 'data');
     }
+
     public function test_lead_page_size_is_bounded_for_kanban_clients(): void
     {
         $owner = User::factory()->create();
