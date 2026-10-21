@@ -3,7 +3,6 @@ import { useAuthStore } from './stores/auth';
 import Login from './pages/Login.vue';
 import Dashboard from './pages/Dashboard.vue';
 import Leads from './pages/Leads.vue';
-import Leads from './pages/Leads.vue';
 
 export const router = createRouter({
   history: createWebHistory(),
