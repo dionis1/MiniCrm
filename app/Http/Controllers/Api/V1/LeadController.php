@@ -19,6 +19,7 @@ class LeadController extends Controller
     {
         $filters = $request->validate([
             'q' => ['nullable', 'string', 'max:100'],
+            'per_page' => ['nullable', 'integer', 'between:1,100'],
             'stage' => ['nullable', Rule::in(Lead::STAGES)],
             'sort' => ['nullable', Rule::in(['created_at', 'name', 'deal_value'])],
             'per_page' => ['nullable', 'integer', 'between:1,100'],
