@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { useAuthStore } from './stores/auth';
 import Login from './pages/Login.vue';
+import PasswordRecovery from './pages/PasswordRecovery.vue';
 import Dashboard from './pages/Dashboard.vue';
 import Leads from './pages/Leads.vue';
 import Customers from './pages/Customers.vue';
@@ -12,6 +13,8 @@ export const router = createRouter({
   routes: [
     { path: '/', redirect: '/dashboard' },
     { path: '/login', component: Login, meta: { guest: true } },
+    { path: '/forgot-password', component: PasswordRecovery, meta: { guest: true } },
+    { path: '/reset-password/:token', component: PasswordRecovery, meta: { guest: true } },
     { path: '/dashboard', component: Dashboard, meta: { auth: true } },
     { path: '/leads', component: Leads, meta: { auth: true } },
     { path: '/customers', component: Customers, meta: { auth: true } },

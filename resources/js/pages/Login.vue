@@ -1,6 +1,6 @@
 <script setup>
 import { ref } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { RouterLink, useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
 import { useToastStore } from '../stores/toasts';
 import { errorText } from '../lib/api';
@@ -48,6 +48,7 @@ async function submit() {
           {{ submitting ? 'Please wait…' : registering ? 'Create account' : 'Sign in' }}
         </button>
       </form>
+      <RouterLink v-if="!registering" to="/forgot-password" class="mt-5 block text-sm font-medium text-indigo-700">Forgot your password?</RouterLink>
       <button type="button" class="mt-6 text-sm font-medium text-indigo-700 hover:underline" @click="registering = !registering; error = ''">
         {{ registering ? 'Already have an account? Sign in' : 'New here? Create an account' }}
       </button>
