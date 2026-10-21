@@ -23,7 +23,7 @@ test('register, create lead, manage customer and complete follow-up', async ({ p
 
   await page.getByRole('link', { name: 'Customers', exact: true }).click();
   await page.getByRole('button', { name: 'Add customer' }).click();
-  await page.getByRole('dialog', { name: 'New customer' }).getByLabel('Company name').fill('Example Corp');
+  await page.getByLabel('Company name').fill('Example Corp');
   await page.getByRole('button', { name: 'Save customer' }).click();
   await expect(page.getByRole('link', { name: 'Example Corp' })).toBeVisible();
 
