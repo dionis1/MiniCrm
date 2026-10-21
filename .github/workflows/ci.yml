@@ -16,6 +16,7 @@ jobs:
           coverage: none
           tools: composer:v2
       - run: composer install --no-interaction --prefer-dist --no-progress
+      - run: cp .env.example .env
       - run: php artisan test
       - run: vendor/bin/pint --test
   frontend:
