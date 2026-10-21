@@ -13,7 +13,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm install --save-dev 'laravel-vite-plugin:^1.3.0' --no-audit --no-fund
+      - run: npm install --save-dev 'laravel-vite-plugin@^1.3.0' --no-audit --no-fund
       - run: npm run build
       - name: Commit manifest dependency
         run: |
